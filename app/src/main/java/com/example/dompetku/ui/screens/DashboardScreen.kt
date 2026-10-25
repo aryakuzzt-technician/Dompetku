@@ -12,21 +12,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dompetku.ui.viewmodel.DompetViewModel
 import java.text.NumberFormat
 import java.util.Locale
 
-private fun rupiah(value: Long): String {
+private fun dashboardRupiah(value: Long): String {
     return NumberFormat.getCurrencyInstance(
         Locale("id", "ID")
     ).format(value).replace(",00", "")
@@ -34,17 +38,8 @@ private fun rupiah(value: Long): String {
 
 @Composable
 fun DashboardScreen() {
-    val gajiBulanIni = 2_500_000L
-    val saldoBulanIni = 1_690_000L
-    val tabunganWajib = 0L
-    val totalSaldoTersisa = 1_690_000L
-
-    val kategori = listOf(
-        "Cicilan wajib" to 810_000L,
-        "Uang bensin" to 250_000L,
-        "Tabungan wajib" to 250_000L,
-        "Dana darurat" to 100_000L
-    )
+    val vm: DompetViewModel = viewModel()
+    val state by vm.uiState.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -57,50 +52,53 @@ fun DashboardScreen() {
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "Ringkasan keuangan bulanan",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Text("Ringkasan keuangan bulanan")
         }
 
         item {
             SummaryCard(
                 title = "Gaji Bulan Ini",
-                amount = gajiBulanIni
+                amount = state.salary
+            )
+        }
+
+        item {
+            SummaryCard(
+                title = "Pemasukan Tambahan",
+                amount = state.income
+            )
+        }
+
+        item {
+            SummaryCard(
+                title = "Total Pengeluaran",
+                amount = state.expenses
             )
         }
 
         item {
             SummaryCard(
                 title = "Saldo Bulan Ini",
-                amount = saldoBulanIni
+                amount = state.remainingBalance
             )
         }
 
         item {
             SummaryCard(
                 title = "Total Tabungan Wajib",
-                amount = tabunganWajib
+                amount = state.mandatorySavings
             )
         }
 
         item {
-            SummaryCard(
-                title = "Total Seluruh Saldo Tersisa",
-                amount = totalSaldoTersisa
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Pembagian Anggaran",
+                text = "Anggaran Bulan Ini",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        items(kategori) { item ->
+        items(state.budgets, key = { it.category }) { budget ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -112,39 +110,63 @@ fun DashboardScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = item.first,
+                            text = budget.category,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = rupiah(item.second),
+                            text = dashboardRupiah(budget.amount),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
 
                     OutlinedButton(
                         onClick = {
-                            // Detail kategori akan diaktifkan berikutnya.
+                            // Menu kategori dibuka melalui navigasi bawah.
                         }
                     ) {
-                        Text("Detail")
+                        Text("Anggaran")
                     }
                 }
             }
         }
 
         item {
-            Button(
-                onClick = {
-                    // Laporan bulanan akan diaktifkan berikutnya.
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Lihat Laporan")
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Pembayaran Cicilan",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (state.installmentPaid) {
+                Text(
+                    text = "Cicilan bulan ini sudah ditandai lunas.",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Button(
+                    onClick = { vm.markInstallmentPaid() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Saya sudah membayar cicilan")
+                }
+            }
+        }
+
+        if (state.message.isNotBlank()) {
+            item {
+                Text(
+                    text = state.message,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -169,9 +191,11 @@ private fun SummaryCard(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium
             )
+
             Spacer(modifier = Modifier.height(6.dp))
+
             Text(
-                text = rupiah(amount),
+                text = dashboardRupiah(amount),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
