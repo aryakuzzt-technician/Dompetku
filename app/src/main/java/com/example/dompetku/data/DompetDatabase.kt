@@ -6,11 +6,18 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ActivePeriodEntity::class, TransactionEntity::class, MonthlyReportEntity::class],
+    entities = [
+        BudgetEntity::class,
+        TransactionEntity::class,
+        InstallmentEntity::class,
+        MonthlyReportEntity::class,
+        AppSettingsEntity::class
+    ],
     version = 1,
     exportSchema = false
 )
 abstract class DompetDatabase : RoomDatabase() {
+
     abstract fun dompetDao(): DompetDao
 
     companion object {
@@ -22,12 +29,12 @@ abstract class DompetDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     DompetDatabase::class.java,
-                    "dompetku_db"
+                    "dompetku_database"
                 ).build()
+
                 INSTANCE = instance
                 instance
             }
         }
     }
 }
-
