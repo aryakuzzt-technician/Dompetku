@@ -1,15 +1,18 @@
 name: Build DompetKu APK
 
 on:
-push:
-branches: ["main", "master"]
-workflow_dispatch:
+ push:
+  branches:
+    - main
+    - master
+ workflow_dispatch:
 
 jobs:
-build:
-runs-on: ubuntu-latest
+ build:
+  name: Build Android APK
+  runs-on: ubuntu-latest
 
-steps:
+  steps:
   - name: Checkout Code
     uses: actions/checkout@v4
 
@@ -17,7 +20,7 @@ steps:
     uses: actions/setup-java@v4
     with:
       java-version: "17"
-      distribution: temurin
+      distribution: "temurin"
 
   - name: Setup Gradle 8.4
     uses: gradle/actions/setup-gradle@v3
