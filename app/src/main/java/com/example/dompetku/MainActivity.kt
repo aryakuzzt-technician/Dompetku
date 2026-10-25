@@ -3,12 +3,16 @@ package com.example.dompetku
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -18,13 +22,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.dompetku.ui.screens.CategoryDetailScreen
 import com.example.dompetku.ui.screens.DashboardScreen
 import com.example.dompetku.ui.screens.ReportScreen
 import com.example.dompetku.ui.screens.SettingsScreen
 import com.example.dompetku.ui.theme.DompetKuTheme
-import com.example.dompetku.ui.viewmodel.DompetViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,8 +36,6 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DompetKuTheme {
-                val vm: DompetViewModel = viewModel()
-
                 var page by remember {
                     mutableStateOf("dashboard")
                 }
@@ -41,6 +43,17 @@ class MainActivity : ComponentActivity() {
                 var selectedCategory by remember {
                     mutableStateOf("Cicilan wajib")
                 }
+
+                val categories = listOf(
+                    "Cicilan wajib",
+                    "Uang bensin",
+                    "Tabungan wajib",
+                    "Dana darurat",
+                    "Kebutuhan harian",
+                    "Orang tua",
+                    "Makanan kucing",
+                    "Saldo bebas"
+                )
 
                 Scaffold(
                     bottomBar = {
@@ -51,7 +64,7 @@ class MainActivity : ComponentActivity() {
                                 icon = {
                                     Icon(
                                         Icons.Default.AccountBalanceWallet,
-                                        contentDescription = "Dashboard"
+                                        contentDescription = "Beranda"
                                     )
                                 },
                                 label = { Text("Beranda") }
@@ -102,9 +115,34 @@ class MainActivity : ComponentActivity() {
                         when (page) {
                             "dashboard" -> DashboardScreen()
 
-                            "category" -> CategoryDetailScreen(
+                            "category" -> {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Pilih Kategori",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+
+                                    categories.forEach { category ->
+                                        Button(
+                                            onClick = {
+                                                selectedCategory = category
+                                                page = "categoryDetail"
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(category)
+                                        }
+                                    }
+                                }
+                            }
+
+                            "categoryDetail" -> CategoryDetailScreen(
                                 category = selectedCategory,
-                                onBack = { page = "dashboard" }
+                                onBack = { page = "category" }
                             )
 
                             "reports" -> ReportScreen(
