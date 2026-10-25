@@ -1,64 +1,201 @@
 package com.example.dompetku.ui.screens
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
-import com.example.dompetku.ui.viewmodel.DompetViewModel
+import java.text.NumberFormat
+import java.util.Locale
+
+private fun rupiahSettings(value: Long): String {
+    return NumberFormat.getCurrencyInstance(
+        Locale("id", "ID")
+    ).format(value).replace(",00", "")
+}
 
 @Composable
-fun SettingsScreen(viewModel: DompetViewModel, navController: NavController) {
-    val period by viewModel.activePeriod.collectAsState()
-    var inputSalary by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf("") }
+fun SettingsScreen(
+    onBack: () -> Unit = {}
+) {
+    var salaryText by remember { mutableStateOf("2500000") }
+    var fuelPercent by remember { mutableFloatStateOf(10f) }
+    var savingsPercent by remember { mutableFloatStateOf(10f) }
+    var emergencyPercent by remember { mutableFloatStateOf(4f) }
+    var message by remember { mutableStateOf("") }
 
-    val currentSalary = period?.salary ?: 2600000.0
+    val salary = salaryText.toLongOrNull() ?: 0L
+    val installment = 810_000L
+    val fuel = (salary * fuelPercent / 100).toLong()
+    val savings = (salary * savingsPercent / 100).toLong()
+    val emergency = (salary * emergencyPercent / 100).toLong()
+    val remaining = salary - installment - fuel - savings - emergency
 
-    Scaffold(
-        topBar = {
-            SmallTopAppBar(
-                title = { Text("Pengaturan Gaji", fontWeight = FontWeight.Bold) },
-                navigationIcon = { TextButton(onClick = { navController.popBackStack() }) { Text("Kembali") } }
-            )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        OutlinedButton(onClick = onBack) {
+            Text("← Kembali")
         }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            Text("Ubah Gaji Bulan Ini", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text("Gaji saat ini: ${formatRupiah(currentSalary)}", fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = inputSalary,
-                onValueChange = { inputSalary = it },
-                label = { Text("Nominal Gaji Baru (Rp)") },
-                modifier = Modifier.fillMaxWidth()
-            )
+        Text(
+            text = "Pengaturan Anggaran",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
 
-            if (errorMessage.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(errorMessage, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-            }
+        OutlinedTextField(
+            value = salaryText,
+            onValueChange = { input ->
+                if (input.all { it.isDigit() }) {
+                    salaryText = input
+                }
+            },
+            label = { Text("Gaji bulanan (Rupiah)") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = {
-                    val newSal = inputSalary.toDoubleOrNull()
-                    if (newSal != null && newSal >= 810000.0) {
-                        viewModel.updateSalary(newSal)
-                        navController.popBackStack()
-                    } else {
-                        errorMessage = "Gaji tidak mencukupi (Minimal Rp810.000 untuk Cicilan Wajib)"
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Simpan & Hitung Ulang Alokasi")
+                Text(
+                    text = "Cicilan wajib",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(rupiahSettings(installment))
+
+                BudgetSlider(
+                    title = "Uang bensin",
+                    percent = fuelPercent,
+                    onChange = { fuelPercent = it },
+                    salary = salary
+                )
+
+                BudgetSlider(
+                    title = "Tabungan wajib",
+                    percent = savingsPercent,
+                    onChange = { savingsPercent = it },
+                    salary = salary
+                )
+
+                BudgetSlider(
+                    title = "Dana darurat",
+                    percent = emergencyPercent,
+                    onChange = { emergencyPercent = it },
+                    salary = salary
+                )
             }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Perkiraan Pembagian",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                SummaryLine("Gaji", salary)
+                SummaryLine("Cicilan wajib", installment)
+                SummaryLine("Uang bensin", fuel)
+                SummaryLine("Tabungan wajib", savings)
+                SummaryLine("Dana darurat", emergency)
+                SummaryLine("Sisa untuk kebutuhan lain", remaining)
+            }
+        }
+
+        Button(
+            onClick = {
+                message = "Pengaturan dihitung sementara. Penyimpanan permanen akan disambungkan ke database."
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Simpan Pengaturan")
+        }
+
+        if (message.isNotBlank()) {
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
 
+@Composable
+private fun BudgetSlider(
+    title: String,
+    percent: Float,
+    onChange: (Float) -> Unit,
+    salary: Long
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(title)
+            Text("${percent.toInt()}%")
+        }
+
+        Slider(
+            value = percent,
+            onValueChange = onChange,
+            valueRange = 0f..50f
+        )
+
+        Text(
+            text = rupiahSettings((salary * percent / 100).toLong()),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun SummaryLine(
+    title: String,
+    amount: Long
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(1.dp))
+        Text(rupiahSettings(amount))
+    }
+}
