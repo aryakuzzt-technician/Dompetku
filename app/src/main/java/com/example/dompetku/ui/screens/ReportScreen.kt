@@ -25,23 +25,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.dompetku.data.TransactionEntity
 import com.example.dompetku.ui.viewmodel.DompetViewModel
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private fun reportRupiah(amount: Long): String =
-    NumberFormat.getCurrencyInstance(Locale("id", "ID"))
-        .format(amount)
-        .replace(",00", "")
-
 @Composable
-fun ReportScreen(onBack: () -> Unit = {}) {
-    val vm: DompetViewModel = viewModel()
+fun ReportScreen(
+    onBack: () -> Unit,
+    vm: DompetViewModel = viewModel()
+) {
     val state by vm.uiState.collectAsState()
     var showClosingDialog by remember { mutableStateOf(false) }
 
@@ -53,13 +50,11 @@ fun ReportScreen(onBack: () -> Unit = {}) {
     if (showClosingDialog) {
         AlertDialog(
             onDismissRequest = { showClosingDialog = false },
-            title = { Text("Konfirmasi Closing") },
+            title = { Text("Closing bulan") },
             text = {
                 Text(
-                    "Tutup laporan $monthLabel?\n\n" +
-                        "Saldo tersisa: ${reportRupiah(state.remainingBalance)}\n\n" +
-                        "Pastikan semua transaksi bulan ini sudah dicatat. " +
-                        "Setelah ditutup, transaksi bulan ini akan diblokir."
+                    "Tutup laporan $monthLabel? " +
+                        "Setelah ditutup, transaksi bulan ini akan dikunci."
                 )
             },
             confirmButton = {
@@ -69,7 +64,7 @@ fun ReportScreen(onBack: () -> Unit = {}) {
                         vm.closeMonth()
                     }
                 ) {
-                    Text("Ya, Tutup Bulan")
+                    Text("Tutup bulan")
                 }
             },
             dismissButton = {
@@ -82,20 +77,20 @@ fun ReportScreen(onBack: () -> Unit = {}) {
         )
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        item {
             Text(
-                "Laporan Bulanan",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                "Laporan keuangan",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                monthLabel,
+                style = MaterialTheme.typography.titleMedium
             )
 
             OutlinedButton(onClick = onBack) {
@@ -103,77 +98,106 @@ fun ReportScreen(onBack: () -> Unit = {}) {
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Periode: $monthLabel")
-                ReportLine("Gaji bulanan", state.salary)
-                ReportLine("Pemasukan tambahan", state.income)
-                ReportLine("Total pengeluaran", state.expenses)
-                ReportLine(
-                    "Saldo tersisa",
-                    state.remainingBalance,
-                    emphasize = true
-                )
-                ReportLine(
-                    "Akumulasi tabungan wajib",
-                    state.mandatorySavings
-                )
-            }
-        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Ringkasan bulan ini",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    ReportLine("Gaji bulanan", state.salary)
+                    ReportLine("Pemasukan tambahan", state.income)
+                    ReportLine("Total pengeluaran", state.expenses)
 
-        Text(
-            "Rincian Transaksi",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
+                    Spacer(Modifier.height(4.dp))
 
-        if (state.transactions.isEmpty()) {
-            Text("Belum ada transaksi bulan ini.")
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(state.transactions, key = { it.id }) { transaction ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                transaction.category,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                "${transaction.type}: " +
-                                    reportRupiah(transaction.amount)
-                            )
-                            if (transaction.note.isNotBlank()) {
-                                Text(transaction.note)
-                            }
-                        }
-                    }
+                    Text(
+                        "Sisa saldo",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        rupiah(state.remainingBalance),
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+
+                    Text("Tabungan wajib: ${rupiah(state.mandatorySavings)}")
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Button(
-            onClick = { showClosingDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Closing Bulanan")
+        item {
+            Button(
+                onClick = { showClosingDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Closing Bulan")
+            }
         }
 
         if (state.message.isNotBlank()) {
+            item {
+                Text(
+                    state.message,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        item {
             Text(
-                state.message,
-                color = MaterialTheme.colorScheme.primary
+                "Riwayat transaksi",
+                style = MaterialTheme.typography.titleLarge
             )
+        }
+
+        if (state.transactions.isEmpty()) {
+            item {
+                Text("Belum ada transaksi bulan ini.")
+            }
+        } else {
+            items(
+                items = state.transactions,
+                key = { transaction: TransactionEntity -> transaction.id }
+            ) { transaction ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                transaction.category,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                if (transaction.type == "INCOME") {
+                                    "+${rupiah(transaction.amount)}"
+                                } else {
+                                    "-${rupiah(transaction.amount)}"
+                                }
+                            )
+                        }
+
+                        if (transaction.note.isNotBlank()) {
+                            Text("Catatan: ${transaction.note}")
+                        }
+
+                        Text(
+                            SimpleDateFormat(
+                                "dd MMM yyyy, HH:mm",
+                                Locale("id", "ID")
+                            ).format(Date(transaction.dateMillis)),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -181,20 +205,19 @@ fun ReportScreen(onBack: () -> Unit = {}) {
 @Composable
 private fun ReportLine(
     label: String,
-    amount: Long,
-    emphasize: Boolean = false
+    amount: Long
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            label,
-            fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal
-        )
-        Text(
-            reportRupiah(amount),
-            fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal
-        )
+        Text(label)
+        Text(rupiah(amount))
     }
+}
+
+private fun rupiah(amount: Long): String {
+    return NumberFormat.getCurrencyInstance(
+        Locale("in", "ID")
+    ).format(amount)
 }
