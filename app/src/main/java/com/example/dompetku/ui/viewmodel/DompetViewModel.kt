@@ -14,7 +14,6 @@ import com.example.dompetku.data.TransactionEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -35,11 +34,9 @@ data class DompetUiState(
 class DompetViewModel(application: Application) :
     AndroidViewModel(application) {
 
-    private val dao = DompetDatabase
-        .getDatabase(application)
-        .dompetDao()
-
-    private val repository = DompetRepository(dao)
+    private val repository = DompetRepository(
+        DompetDatabase.getDatabase(application).dompetDao()
+    )
 
     private fun currentMonthKey(): String =
         SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
@@ -106,9 +103,21 @@ class DompetViewModel(application: Application) :
     private fun recalculate() {
         val state = _uiState.value
         _uiState.value = state.copy(
-            remainingBalance =
-                state.salary + state.income - state.expenses
+            remainingBalance = state.salary + state.income - state.expenses
         )
+    }
+
+    private fun setMessage(message: String) {
+        _uiState.value = _uiState.value.copy(message = message)
+    }
+
+    private suspend fun ensureMonthOpen(): Boolean {
+        val report = repository.getReport(currentMonthKey())
+        if (report?.isClosed == true) {
+            setMessage("Bulan ini sudah ditutup.")
+            return false
+        }
+        return true
     }
 
     private fun initializeSettings() {
@@ -128,30 +137,10 @@ class DompetViewModel(application: Application) :
             if (repository.getBudgets(month).isEmpty()) {
                 repository.saveBudgets(
                     listOf(
-                        BudgetEntity(
-                            category = "Cicilan wajib",
-                            amount = 810_000L,
-                            percentage = 0f,
-                            monthKey = month
-                        ),
-                        BudgetEntity(
-                            category = "Uang bensin",
-                            amount = 250_000L,
-                            percentage = 10f,
-                            monthKey = month
-                        ),
-                        BudgetEntity(
-                            category = "Tabungan wajib",
-                            amount = 250_000L,
-                            percentage = 10f,
-                            monthKey = month
-                        ),
-                        BudgetEntity(
-                            category = "Dana darurat",
-                            amount = 100_000L,
-                            percentage = 4f,
-                            monthKey = month
-                        )
+                        BudgetEntity("Cicilan wajib", 810_000L, 0f, month),
+                        BudgetEntity("Uang bensin", 250_000L, 10f, month),
+                        BudgetEntity("Tabungan wajib", 250_000L, 10f, month),
+                        BudgetEntity("Dana darurat", 100_000L, 4f, month)
                     )
                 )
             }
@@ -165,13 +154,61 @@ class DompetViewModel(application: Application) :
         }
 
         viewModelScope.launch {
-            val settings = repository.getSettings()
-                ?: AppSettingsEntity()
-
-            repository.saveSettings(
-                settings.copy(monthlySalary = amount)
-            )
+            val settings = repository.getSettings() ?: AppSettingsEntity()
+            repository.saveSettings(settings.copy(monthlySalary = amount))
             setMessage("Gaji berhasil diperbarui.")
+        }
+    }
+
+    fun saveSettings(settings: AppSettingsEntity) {
+        if (settings.monthlySalary <= 0L || settings.installmentAmount < 0L) {
+            setMessage("Gaji harus lebih dari nol dan cicilan tidak boleh negatif.")
+            return
+        }
+
+        viewModelScope.launch {
+            if (!ensureMonthOpen()) return@launch
+
+            repository.saveSettings(settings)
+
+            val month = currentMonthKey()
+            val budgets = listOf(
+                BudgetEntity(
+                    "Cicilan wajib",
+                    settings.installmentAmount,
+                    0f,
+                    month
+                ),
+                BudgetEntity(
+                    "Uang bensin",
+                    (settings.monthlySalary * settings.fuelPercentage / 100).toLong(),
+                    settings.fuelPercentage,
+                    month
+                ),
+                BudgetEntity(
+                    "Tabungan wajib",
+                    (settings.monthlySalary * settings.savingsPercentage / 100).toLong(),
+                    settings.savingsPercentage,
+                    month
+                ),
+                BudgetEntity(
+                    "Dana darurat",
+                    (settings.monthlySalary * settings.emergencyPercentage / 100).toLong(),
+                    settings.emergencyPercentage,
+                    month
+                )
+            )
+
+            repository.saveBudgets(budgets)
+
+            val installment = repository.getInstallment(month)
+                ?: InstallmentEntity(monthKey = month)
+
+            repository.saveInstallment(
+                installment.copy(amount = settings.installmentAmount)
+            )
+
+            setMessage("Pengaturan berhasil disimpan.")
         }
     }
 
@@ -195,18 +232,9 @@ class DompetViewModel(application: Application) :
         }
 
         viewModelScope.launch {
-            if (repository.getReport(currentMonthKey())?.isClosed == true) {
-                setMessage("Bulan ini sudah ditutup.")
-                return@launch
-            }
+            if (!ensureMonthOpen()) return@launch
 
-            repository.addTransaction(
-                category = category,
-                amount = amount,
-                type = type,
-                note = note
-            )
-
+            repository.addTransaction(category, amount, type, note)
             setMessage("Transaksi berhasil disimpan.")
         }
     }
@@ -218,6 +246,8 @@ class DompetViewModel(application: Application) :
         }
 
         viewModelScope.launch {
+            if (!ensureMonthOpen()) return@launch
+
             repository.saveBudget(
                 BudgetEntity(
                     category = category,
@@ -232,13 +262,9 @@ class DompetViewModel(application: Application) :
 
     fun markInstallmentPaid() {
         viewModelScope.launch {
+            if (!ensureMonthOpen()) return@launch
+
             val month = currentMonthKey()
-
-            if (repository.getReport(month)?.isClosed == true) {
-                setMessage("Bulan ini sudah ditutup.")
-                return@launch
-            }
-
             val installment = repository.getInstallment(month)
                 ?: InstallmentEntity(monthKey = month)
 
@@ -247,17 +273,14 @@ class DompetViewModel(application: Application) :
                 return@launch
             }
 
-            repository.saveInstallment(
-                installment.copy(isPaid = true)
-            )
-
             repository.addTransaction(
-                category = "Cicilan wajib",
-                amount = installment.amount,
-                type = "EXPENSE",
-                note = "Pembayaran cicilan wajib"
+                "Cicilan wajib",
+                installment.amount,
+                "EXPENSE",
+                "Pembayaran cicilan wajib"
             )
 
+            repository.saveInstallment(installment.copy(isPaid = true))
             setMessage("Cicilan ditandai lunas.")
         }
     }
@@ -271,10 +294,9 @@ class DompetViewModel(application: Application) :
                 return@launch
             }
 
-            val settings = repository.getSettings()
-                ?: AppSettingsEntity()
-
+            val settings = repository.getSettings() ?: AppSettingsEntity()
             val transactions = repository.getTransactions(month)
+
             val income = transactions
                 .filter { it.type == "INCOME" }
                 .sumOf { it.amount }
@@ -286,7 +308,7 @@ class DompetViewModel(application: Application) :
             val savings = transactions
                 .filter {
                     it.type == "EXPENSE" &&
-                    it.category == "Tabungan wajib"
+                        it.category == "Tabungan wajib"
                 }
                 .sumOf { it.amount }
 
@@ -314,10 +336,6 @@ class DompetViewModel(application: Application) :
 
             setMessage("Laporan $month berhasil ditutup.")
         }
-    }
-
-    private fun setMessage(message: String) {
-        _uiState.value = _uiState.value.copy(message = message)
     }
     }
     
