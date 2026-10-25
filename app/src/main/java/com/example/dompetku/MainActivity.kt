@@ -4,26 +4,28 @@ package com.example.dompetku
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,12 +42,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DompetKuTheme {
-                var page by remember {
+                var page by rememberSaveable {
                     mutableStateOf("dashboard")
                 }
 
-                var selectedCategory by remember {
-                    mutableStateOf("Cicilan wajib")
+                var selectedCategory by rememberSaveable {
+                    mutableStateOf("")
                 }
 
                 val categories = listOf(
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 Scaffold(
+                    modifier = Modifier.fillMaxSize(),
                     bottomBar = {
                         NavigationBar {
                             NavigationBarItem(
@@ -67,7 +70,7 @@ class MainActivity : ComponentActivity() {
                                 onClick = { page = "dashboard" },
                                 icon = {
                                     Icon(
-                                        Icons.Default.AccountBalanceWallet,
+                                        Icons.Default.Home,
                                         contentDescription = "Beranda"
                                     )
                                 },
@@ -75,9 +78,8 @@ class MainActivity : ComponentActivity() {
                             )
 
                             NavigationBarItem(
-                                selected = page == "category" ||
-                                    page == "categoryDetail",
-                                onClick = { page = "category" },
+                                selected = page == "categories",
+                                onClick = { page = "categories" },
                                 icon = {
                                     Icon(
                                         Icons.Default.Category,
@@ -113,17 +115,12 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-
-                    Surface(
-                        modifier = Modifier.padding(innerPadding),
-                        color = MaterialTheme.colorScheme.background
-                    ) {
-                        when (page) {
-
-                            "dashboard" -> DashboardScreen(
+                    when (page) {
+                        "dashboard" -> {
+                            DashboardScreen(
                                 onOpenCategory = { category ->
                                     selectedCategory = category
-                                    page = "categoryDetail"
+                                    page = "detail"
                                 },
                                 onOpenReports = {
                                     page = "reports"
@@ -132,50 +129,82 @@ class MainActivity : ComponentActivity() {
                                     page = "settings"
                                 }
                             )
+                        }
 
-                            "category" -> LazyColumn(
-                                contentPadding = PaddingValues(16.dp)
+                        "categories" -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding)
+                                    .padding(horizontal = 16.dp),
+                                contentPadding = PaddingValues(
+                                    top = 16.dp,
+                                    bottom = 16.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 item {
                                     Text(
-                                        text = "Pilih Kategori",
-                                        style = MaterialTheme.typography.headlineSmall
+                                        "Kategori keuangan",
+                                        style = MaterialTheme.typography.headlineMedium
                                     )
                                 }
 
                                 items(categories.size) { index ->
-                                    OutlinedButton(
+                                    val category = categories[index]
+
+                                    Button(
                                         onClick = {
-                                            selectedCategory = categories[index]
-                                            page = "categoryDetail"
+                                            selectedCategory = category
+                                            page = "detail"
                                         },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(categories[index])
+                                        Text(category)
                                     }
                                 }
                             }
+                        }
 
-                            "categoryDetail" -> CategoryDetailScreen(
+                        "detail" -> {
+                            CategoryDetailScreen(
                                 category = selectedCategory,
                                 onBack = {
-                                    page = "category"
+                                    page = "categories"
                                 }
                             )
+                        }
 
-                            "reports" -> ReportScreen(
+                        "reports" -> {
+                            ReportScreen(
                                 onBack = {
                                     page = "dashboard"
                                 }
                             )
+                        }
 
-                            "settings" -> SettingsScreen(
+                        "settings" -> {
+                            SettingsScreen(
                                 onBack = {
                                     page = "dashboard"
                                 }
                             )
+                        }
+
+                        else -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding)
+                                    .padding(16.dp)
+                            ) {
+                                Text("Halaman tidak ditemukan.")
+                                Button(
+                                    onClick = { page = "dashboard" }
+                                ) {
+                                    Text("Kembali ke beranda")
+                                }
+                            }
                         }
                     }
                 }
