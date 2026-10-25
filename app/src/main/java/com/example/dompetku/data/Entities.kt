@@ -1,18 +1,32 @@
+
 package com.example.dompetku.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "budgets")
+@Entity(
+    tableName = "budgets",
+    indices = [
+        Index(value = ["monthKey", "category"], unique = true)
+    ]
+)
 data class BudgetEntity(
-    @PrimaryKey
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
     val category: String,
     val amount: Long,
     val percentage: Float = 0f,
     val monthKey: String
 )
 
-@Entity(tableName = "transactions")
+@Entity(
+    tableName = "transactions",
+    indices = [
+        Index(value = ["monthKey"]),
+        Index(value = ["category", "monthKey"])
+    ]
+)
 data class TransactionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -24,9 +38,11 @@ data class TransactionEntity(
     val monthKey: String
 )
 
-@Entity(tableName = "installments")
+@Entity(
+    tableName = "installments",
+    primaryKeys = ["id", "monthKey"]
+)
 data class InstallmentEntity(
-    @PrimaryKey
     val id: Int = 1,
     val title: String = "Cicilan wajib",
     val amount: Long = 810_000L,
