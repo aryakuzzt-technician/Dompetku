@@ -1,56 +1,52 @@
-package com.example.dompetku.repository
+package com.example.dompetku.data
 
-import com.example.dompetku.data.AppSettingsEntity
-import com.example.dompetku.data.BudgetEntity
-import com.example.dompetku.data.DompetDao
-import com.example.dompetku.data.InstallmentEntity
-import com.example.dompetku.data.MonthlyReportEntity
-import com.example.dompetku.data.TransactionEntity
 import kotlinx.coroutines.flow.Flow
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class DompetRepository(
     private val dao: DompetDao
 ) {
-    private fun currentMonthKey(): String {
-        return SimpleDateFormat(
-            "yyyy-MM",
-            Locale.US
-        ).format(Date())
-    }
+    fun observeBudgets(monthKey: String): Flow<List<BudgetEntity>> =
+        dao.observeBudgets(monthKey)
 
-    fun observeBudgets(
-        monthKey: String = currentMonthKey()
-    ): Flow<List<BudgetEntity>> {
-        return dao.observeBudgets(monthKey)
-    }
+    fun observeTransactions(monthKey: String): Flow<List<TransactionEntity>> =
+        dao.observeTransactions(monthKey)
+
+    fun observeIncome(monthKey: String): Flow<Long> =
+        dao.observeIncome(monthKey)
+
+    fun observeExpenses(monthKey: String): Flow<Long> =
+        dao.observeExpenses(monthKey)
+
+    fun observeInstallment(monthKey: String): Flow<InstallmentEntity?> =
+        dao.observeInstallment(monthKey)
+
+    fun observeSettings(): Flow<AppSettingsEntity?> =
+        dao.observeSettings()
+
+    fun observeReports(): Flow<List<MonthlyReportEntity>> =
+        dao.observeReports()
+
+    suspend fun getBudgets(monthKey: String): List<BudgetEntity> =
+        dao.getBudgets(monthKey)
+
+    suspend fun getTransactions(monthKey: String): List<TransactionEntity> =
+        dao.getTransactions(monthKey)
+
+    suspend fun getInstallment(monthKey: String): InstallmentEntity? =
+        dao.getInstallment(monthKey)
+
+    suspend fun getSettings(): AppSettingsEntity? =
+        dao.getSettings()
+
+    suspend fun getReport(monthKey: String): MonthlyReportEntity? =
+        dao.getReport(monthKey)
 
     suspend fun saveBudget(budget: BudgetEntity) {
-        dao.saveBudget(budget)
+        dao.insertBudget(budget)
     }
 
     suspend fun saveBudgets(budgets: List<BudgetEntity>) {
-        dao.saveBudgets(budgets)
-    }
-
-    fun observeTransactions(
-        monthKey: String = currentMonthKey()
-    ): Flow<List<TransactionEntity>> {
-        return dao.observeTransactions(monthKey)
-    }
-
-    fun observeIncomeTotal(
-        monthKey: String = currentMonthKey()
-    ): Flow<Long> {
-        return dao.observeIncomeTotal(monthKey)
-    }
-
-    fun observeExpenseTotal(
-        monthKey: String = currentMonthKey()
-    ): Flow<Long> {
-        return dao.observeExpenseTotal(monthKey)
+        budgets.forEach { dao.insertBudget(it) }
     }
 
     suspend fun addTransaction(
@@ -58,76 +54,41 @@ class DompetRepository(
         amount: Long,
         type: String,
         note: String = ""
-    ): Long {
-        require(amount > 0) {
-            "Nominal transaksi harus lebih dari nol."
-        }
-
+    ) {
+        require(amount > 0L) { "Nominal transaksi harus lebih dari nol." }
         require(type in listOf("INCOME", "EXPENSE", "TRANSFER")) {
             "Jenis transaksi tidak valid."
         }
 
-        return dao.insertTransaction(
+        val monthKey = java.text.SimpleDateFormat(
+            "yyyy-MM",
+            java.util.Locale.US
+        ).format(java.util.Date())
+
+        dao.insertTransaction(
             TransactionEntity(
                 category = category,
                 amount = amount,
                 type = type,
                 note = note,
-                monthKey = currentMonthKey()
+                monthKey = monthKey
             )
         )
     }
 
-    fun observeInstallment(
-        monthKey: String = currentMonthKey()
-    ): Flow<InstallmentEntity?> {
-        return dao.observeInstallment(monthKey)
-    }
-
     suspend fun saveInstallment(installment: InstallmentEntity) {
-        dao.saveInstallment(installment)
-    }
-
-    fun observeReports(): Flow<List<MonthlyReportEntity>> {
-        return dao.observeReports()
-    }
-
-    suspend fun getReport(monthKey: String): MonthlyReportEntity? {
-        return dao.getReport(monthKey)
-    }
-
-    suspend fun saveReport(report: MonthlyReportEntity) {
-        dao.saveReport(report)
-    }
-
-    fun observeSettings(): Flow<AppSettingsEntity?> {
-        return dao.observeSettings()
+        dao.insertInstallment(installment)
     }
 
     suspend fun saveSettings(settings: AppSettingsEntity) {
-        dao.saveSettings(settings)
+        dao.insertSettings(settings)
     }
 
-    suspend fun getSettings(): AppSettingsEntity? {
-        return dao.getSettings()
+    suspend fun saveReport(report: MonthlyReportEntity) {
+        dao.insertReport(report)
     }
 
-    suspend fun getBudgetsForMonth(
-        monthKey: String
-    ): List<BudgetEntity> {
-        return dao.getBudgetsForMonth(monthKey)
-    }
-
-    suspend fun getTransactionsForMonth(
-        monthKey: String
-    ): List<TransactionEntity> {
-        return dao.getTransactionsForMonth(monthKey)
-    }
-
-    suspend fun getInstallmentForMonth(
-        monthKey: String
-    ): InstallmentEntity? {
-        return dao.getInstallmentForMonth(monthKey)
+    suspend fun deleteTransaction(transaction: TransactionEntity) {
+        dao.deleteTransaction(transaction)
     }
 }
-
