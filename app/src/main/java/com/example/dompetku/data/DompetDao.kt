@@ -1,75 +1,98 @@
+
 package com.example.dompetku.data
 
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DompetDao {
-    @Query("SELECT * FROM active_period WHERE id = 1")
-    fun getActivePeriod(): Flow<ActivePeriodEntity?>
 
-    @Query("SELECT * FROM active_period WHERE id = 1")
-    suspend fun getActivePeriodDirect(): ActivePeriodEntity?
+    // Anggaran kategori
+    @Query("SELECT * FROM budgets WHERE monthKey = :monthKey")
+    fun observeBudgets(monthKey: String): Flow<List<BudgetEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdateActivePeriod(period: ActivePeriodEntity)
+    suspend fun saveBudget(budget: BudgetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveBudgets(budgets: List<BudgetEntity>)
+
+    // Transaksi
+    @Query(
+        "SELECT * FROM transactions " +
+        "WHERE monthKey = :monthKey ORDER BY dateMillis DESC"
+    )
+    fun observeTransactions(monthKey: String): Flow<List<TransactionEntity>>
+
+    @Query(
+        "SELECT COALESCE(SUM(amount), 0) FROM transactions " +
+        "WHERE monthKey = :monthKey AND type = 'INCOME'"
+    )
+    fun observeIncomeTotal(monthKey: String): Flow<Long>
+
+    @Query(
+        "SELECT COALESCE(SUM(amount), 0) FROM transactions " +
+        "WHERE monthKey = :monthKey AND type = 'EXPENSE'"
+    )
+    fun observeExpenseTotal(monthKey: String): Flow<Long>
+
+    @Query(
+        "SELECT COALESCE(SUM(amount), 0) FROM transactions " +
+        "WHERE monthKey = :monthKey AND category = :category"
+    )
+    fun observeCategoryTotal(
+        monthKey: String,
+        category: String
+    ): Flow<Long>
 
     @Insert
-    suspend fun insertTransaction(transaction: TransactionEntity)
+    suspend fun insertTransaction(transaction: TransactionEntity): Long
 
-    @Query("SELECT * FROM transactions WHERE monthYear = :monthYear ORDER BY timestamp DESC")
-    fun getTransactionsByMonth(monthYear: String): Flow<List<TransactionEntity>>
+    @Update
+    suspend fun updateTransaction(transaction: TransactionEntity)
 
-    @Insert
-    suspend fun insertReport(report: MonthlyReportEntity)
+    @Delete
+    suspend fun deleteTransaction(transaction: TransactionEntity)
 
-    @Query("SELECT * FROM monthly_reports ORDER BY closedTimestamp DESC")
-    fun getAllReports(): Flow<List<MonthlyReportEntity>>
+    // Status cicilan
+    @Query("SELECT * FROM installments WHERE monthKey = :monthKey LIMIT 1")
+    fun observeInstallment(monthKey: String): Flow<InstallmentEntity?>
 
-    @Transaction
-    suspend fun executeTransfer(
-        sourceCategory: String,
-        targetCategory: String,
-        amount: Double,
-        monthYear: String,
-        currentPeriod: ActivePeriodEntity
-    ) {
-        var bB = currentPeriod.bensinBalance
-        var tB = currentPeriod.tabunganBalance
-        var dB = currentPeriod.daruratBalance
-        var sB = currentPeriod.sisaBalance
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveInstallment(installment: InstallmentEntity)
 
-        when (sourceCategory) {
-            "BENSIN" -> bB -= amount
-            "TABUNGAN" -> tB -= amount
-            "DARURAT" -> dB -= amount
-            "SISA" -> sB -= amount
-        }
+    // Laporan bulanan
+    @Query("SELECT * FROM monthly_reports ORDER BY monthKey DESC")
+    fun observeReports(): Flow<List<MonthlyReportEntity>>
 
-        when (targetCategory) {
-            "BENSIN" -> bB += amount
-            "TABUNGAN" -> tB += amount
-            "DARURAT" -> dB += amount
-            "SISA" -> sB += amount
-        }
+    @Query("SELECT * FROM monthly_reports WHERE monthKey = :monthKey LIMIT 1")
+    suspend fun getReport(monthKey: String): MonthlyReportEntity?
 
-        val updated = currentPeriod.copy(
-            bensinBalance = bB,
-            tabunganBalance = tB,
-            daruratBalance = dB,
-            sisaBalance = sB
-        )
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveReport(report: MonthlyReportEntity)
 
-        insertOrUpdateActivePeriod(updated)
-        insertTransaction(
-            TransactionEntity(
-                monthYear = monthYear,
-                category = sourceCategory,
-                type = "TRANSFER",
-                amount = amount,
-                note = "Transfer ke $targetCategory"
-            )
-        )
-    }
+    // Pengaturan aplikasi
+    @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
+    fun observeSettings(): Flow<AppSettingsEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSettings(settings: AppSettingsEntity)
+
+    // Penutupan bulan
+    @Query("SELECT * FROM budgets WHERE monthKey = :monthKey")
+    suspend fun getBudgetsForMonth(monthKey: String): List<BudgetEntity>
+
+    @Query("SELECT * FROM transactions WHERE monthKey = :monthKey")
+    suspend fun getTransactionsForMonth(monthKey: String): List<TransactionEntity>
+
+    @Query("SELECT * FROM installments WHERE monthKey = :monthKey LIMIT 1")
+    suspend fun getInstallmentForMonth(monthKey: String): InstallmentEntity?
+
+    @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
+    suspend fun getSettings(): AppSettingsEntity?
 }
-
