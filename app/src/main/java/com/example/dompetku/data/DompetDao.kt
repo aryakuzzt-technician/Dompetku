@@ -2,7 +2,6 @@
 package com.example.dompetku.data
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -11,17 +10,16 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DompetDao {
 
-    // =========================
-    // ANGGARAN
-    // =========================
+    // ==================== BUDGET ====================
 
     @Query(
-        "SELECT * FROM budgets " +
-        "WHERE monthKey = :monthKey ORDER BY category ASC"
+        "SELECT * FROM budgets WHERE monthKey = :monthKey ORDER BY category ASC"
     )
     fun observeBudgets(monthKey: String): Flow<List<BudgetEntity>>
 
-    @Query("SELECT * FROM budgets WHERE monthKey = :monthKey")
+    @Query(
+        "SELECT * FROM budgets WHERE monthKey = :monthKey ORDER BY category ASC"
+    )
     suspend fun getBudgets(monthKey: String): List<BudgetEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -30,63 +28,74 @@ interface DompetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBudgets(budgets: List<BudgetEntity>)
 
-    // =========================
-    // TRANSAKSI
-    // =========================
+    @Query(
+        "DELETE FROM budgets WHERE monthKey = :monthKey AND category = :category"
+    )
+    suspend fun deleteBudget(monthKey: String, category: String)
+
+
+    // ==================== TRANSACTIONS ====================
 
     @Query(
-        "SELECT * FROM transactions " +
-        "WHERE monthKey = :monthKey ORDER BY dateMillis DESC"
+        """
+        SELECT * FROM transactions
+        WHERE monthKey = :monthKey
+        ORDER BY dateMillis DESC, id DESC
+        """
     )
-    fun observeTransactions(
-        monthKey: String
-    ): Flow<List<TransactionEntity>>
+    fun observeTransactions(monthKey: String): Flow<List<TransactionEntity>>
 
-    @Query("SELECT * FROM transactions WHERE monthKey = :monthKey")
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE monthKey = :monthKey
+        ORDER BY dateMillis DESC, id DESC
+        """
+    )
     suspend fun getTransactions(monthKey: String): List<TransactionEntity>
 
     @Query(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions " +
-        "WHERE monthKey = :monthKey AND type = 'INCOME'"
+        """
+        SELECT COALESCE(SUM(amount), 0)
+        FROM transactions
+        WHERE monthKey = :monthKey AND type = 'INCOME'
+        """
     )
     fun observeIncome(monthKey: String): Flow<Long>
 
     @Query(
-        "SELECT COALESCE(SUM(amount), 0) FROM transactions " +
-        "WHERE monthKey = :monthKey AND type = 'EXPENSE'"
+        """
+        SELECT COALESCE(SUM(amount), 0)
+        FROM transactions
+        WHERE monthKey = :monthKey AND type = 'EXPENSE'
+        """
     )
     fun observeExpenses(monthKey: String): Flow<Long>
 
-    @Insert
-    suspend fun insertTransaction(transaction: TransactionEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransaction(transaction: TransactionEntity): Long
 
-    @Delete
-    suspend fun deleteTransaction(transaction: TransactionEntity)
+    @Query("DELETE FROM transactions WHERE id = :transactionId")
+    suspend fun deleteTransaction(transactionId: Long)
 
-    // =========================
-    // CICILAN
-    // =========================
+
+    // ==================== INSTALLMENT ====================
 
     @Query(
-        "SELECT * FROM installments " +
-        "WHERE monthKey = :monthKey LIMIT 1"
+        "SELECT * FROM installments WHERE monthKey = :monthKey AND id = 1 LIMIT 1"
     )
-    fun observeInstallment(
-        monthKey: String
-    ): Flow<InstallmentEntity?>
+    fun observeInstallment(monthKey: String): Flow<InstallmentEntity?>
 
     @Query(
-        "SELECT * FROM installments " +
-        "WHERE monthKey = :monthKey LIMIT 1"
+        "SELECT * FROM installments WHERE monthKey = :monthKey AND id = 1 LIMIT 1"
     )
     suspend fun getInstallment(monthKey: String): InstallmentEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInstallment(installment: InstallmentEntity)
 
-    // =========================
-    // PENGATURAN
-    // =========================
+
+    // ==================== APP SETTINGS ====================
 
     @Query("SELECT * FROM app_settings WHERE id = 1 LIMIT 1")
     fun observeSettings(): Flow<AppSettingsEntity?>
@@ -97,16 +106,16 @@ interface DompetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSettings(settings: AppSettingsEntity)
 
-    // =========================
-    // LAPORAN BULANAN
-    // =========================
 
-    @Query("SELECT * FROM monthly_reports ORDER BY monthKey DESC")
+    // ==================== MONTHLY REPORTS ====================
+
+    @Query(
+        "SELECT * FROM monthly_reports ORDER BY monthKey DESC"
+    )
     fun observeReports(): Flow<List<MonthlyReportEntity>>
 
     @Query(
-        "SELECT * FROM monthly_reports " +
-        "WHERE monthKey = :monthKey LIMIT 1"
+        "SELECT * FROM monthly_reports WHERE monthKey = :monthKey LIMIT 1"
     )
     suspend fun getReport(monthKey: String): MonthlyReportEntity?
 
