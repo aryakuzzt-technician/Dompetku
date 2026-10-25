@@ -1,3 +1,4 @@
+
 package com.example.dompetku.data
 
 import android.content.Context
@@ -26,14 +27,13 @@ abstract class DompetDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): DompetDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     DompetDatabase::class.java,
                     "dompetku_database"
-                ).build()
-
-                INSTANCE = instance
-                instance
+                )
+                    .build()
+                    .also { INSTANCE = it }
             }
         }
     }
