@@ -7,24 +7,31 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.dompetku.data.MonthlyReportEntity
 import com.example.dompetku.ui.viewmodel.DompetViewModel
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 private fun reportRupiah(amount: Long): String =
@@ -36,6 +43,44 @@ private fun reportRupiah(amount: Long): String =
 fun ReportScreen(onBack: () -> Unit = {}) {
     val vm: DompetViewModel = viewModel()
     val state by vm.uiState.collectAsState()
+    var showClosingDialog by remember { mutableStateOf(false) }
+
+    val monthLabel = SimpleDateFormat(
+        "MMMM yyyy",
+        Locale("id", "ID")
+    ).format(Date())
+
+    if (showClosingDialog) {
+        AlertDialog(
+            onDismissRequest = { showClosingDialog = false },
+            title = { Text("Konfirmasi Closing") },
+            text = {
+                Text(
+                    "Tutup laporan $monthLabel?\n\n" +
+                        "Saldo tersisa: ${reportRupiah(state.remainingBalance)}\n\n" +
+                        "Pastikan semua transaksi bulan ini sudah dicatat. " +
+                        "Setelah ditutup, transaksi bulan ini akan diblokir."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClosingDialog = false
+                        vm.closeMonth()
+                    }
+                ) {
+                    Text("Ya, Tutup Bulan")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showClosingDialog = false }
+                ) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -48,7 +93,7 @@ fun ReportScreen(onBack: () -> Unit = {}) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Laporan Bulanan",
+                "Laporan Bulanan",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -63,7 +108,7 @@ fun ReportScreen(onBack: () -> Unit = {}) {
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Ringkasan bulan berjalan")
+                Text("Periode: $monthLabel")
                 ReportLine("Gaji bulanan", state.salary)
                 ReportLine("Pemasukan tambahan", state.income)
                 ReportLine("Total pengeluaran", state.expenses)
@@ -80,7 +125,7 @@ fun ReportScreen(onBack: () -> Unit = {}) {
         }
 
         Text(
-            text = "Rincian Transaksi",
+            "Rincian Transaksi",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
@@ -103,9 +148,8 @@ fun ReportScreen(onBack: () -> Unit = {}) {
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
-                                "${transaction.type}: ${
+                                "${transaction.type}: " +
                                     reportRupiah(transaction.amount)
-                                }"
                             )
                             if (transaction.note.isNotBlank()) {
                                 Text(transaction.note)
@@ -116,8 +160,10 @@ fun ReportScreen(onBack: () -> Unit = {}) {
             }
         }
 
+        Spacer(modifier = Modifier.height(4.dp))
+
         Button(
-            onClick = { vm.closeMonth() },
+            onClick = { showClosingDialog = true },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Closing Bulanan")
@@ -125,7 +171,7 @@ fun ReportScreen(onBack: () -> Unit = {}) {
 
         if (state.message.isNotBlank()) {
             Text(
-                text = state.message,
+                state.message,
                 color = MaterialTheme.colorScheme.primary
             )
         }
@@ -143,11 +189,11 @@ private fun ReportLine(
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            text = label,
+            label,
             fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal
         )
         Text(
-            text = reportRupiah(amount),
+            reportRupiah(amount),
             fontWeight = if (emphasize) FontWeight.Bold else FontWeight.Normal
         )
     }
