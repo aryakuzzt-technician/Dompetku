@@ -3,209 +3,320 @@ package com.example.dompetku.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.dompetku.data.*
-import kotlinx.coroutines.flow.*
+import com.example.dompetku.data.AppSettingsEntity
+import com.example.dompetku.data.BudgetEntity
+import com.example.dompetku.data.DompetDatabase
+import com.example.dompetku.data.InstallmentEntity
+import com.example.dompetku.data.MonthlyReportEntity
+import com.example.dompetku.repository.DompetRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-class DompetViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = DompetDatabase.getDatabase(application).dompetDao()
+data class DompetUiState(
+    val salary: Long = 2_500_000L,
+    val income: Long = 0L,
+    val expenses: Long = 0L,
+    val mandatorySavings: Long = 0L,
+    val remainingBalance: Long = 0L,
+    val budgets: List<BudgetEntity> = emptyList(),
+    val installmentPaid: Boolean = false,
+    val message: String = ""
+)
 
-    val activePeriod: StateFlow<ActivePeriodEntity?> = dao.getActivePeriod()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+class DompetViewModel(
+    application: Application
+) : AndroidViewModel(application) {
 
-    val currentTransactions: StateFlow<List<TransactionEntity>> = activePeriod.flatMapLatest { period ->
-        if (period != null) dao.getTransactionsByMonth(period.monthYear) else flowOf(emptyList())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val dao = DompetDatabase
+        .getDatabase(application)
+        .dompetDao()
 
-    val allReports: StateFlow<List<MonthlyReportEntity>> = dao.getAllReports()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val repository = DompetRepository(dao)
+
+    private fun currentMonthKey(): String {
+        return SimpleDateFormat(
+            "yyyy-MM",
+            Locale.US
+        ).format(Date())
+    }
+
+    private val _uiState = MutableStateFlow(DompetUiState())
+    val uiState: StateFlow<DompetUiState> = _uiState.asStateFlow()
 
     init {
+        observeData()
+        initializeSettings()
+    }
+
+    private fun observeData() {
+        val month = currentMonthKey()
+
         viewModelScope.launch {
-            if (dao.getActivePeriodDirect() == null) {
-                initDefaultPeriod(2600000.0, "Oktober 2026")
+            repository.observeIncomeTotal(month).collect { income ->
+                _uiState.value = _uiState.value.copy(income = income)
+                recalculate()
+            }
+        }
+
+        viewModelScope.launch {
+            repository.observeExpenseTotal(month).collect { expenses ->
+                _uiState.value = _uiState.value.copy(expenses = expenses)
+                recalculate()
+            }
+        }
+
+        viewModelScope.launch {
+            repository.observeBudgets(month).collect { budgets ->
+                _uiState.value = _uiState.value.copy(budgets = budgets)
+                recalculate()
+            }
+        }
+
+        viewModelScope.launch {
+            repository.observeInstallment(month).collect { installment ->
+                _uiState.value = _uiState.value.copy(
+                    installmentPaid = installment?.isPaid ?: false
+                )
+            }
+        }
+
+        viewModelScope.launch {
+            repository.observeSettings().collect { settings ->
+                if (settings != null) {
+                    _uiState.value = _uiState.value.copy(
+                        salary = settings.monthlySalary,
+                        mandatorySavings = settings.accumulatedMandatorySavings
+                    )
+                    recalculate()
+                }
             }
         }
     }
 
-    fun calculateAllocation(salary: Double): Map<String, Double> {
-        val cicilan = 810000.0
-        val sisaBersih = (salary - cicilan).coerceAtLeast(0.0)
-        return mapOf(
-            "CICILAN" to cicilan,
-            "BENSIN" to sisaBersih * 0.15,
-            "TABUNGAN" to sisaBersih * 0.30,
-            "DARURAT" to sisaBersih * 0.15,
-            "SISA" to sisaBersih * 0.40
+    private fun recalculate() {
+        val state = _uiState.value
+        val balance = state.salary + state.income - state.expenses
+
+        _uiState.value = state.copy(
+            remainingBalance = balance
         )
     }
 
-    fun initDefaultPeriod(salary: Double, monthYear: String) {
+    private fun initializeSettings() {
         viewModelScope.launch {
-            val alloc = calculateAllocation(salary)
-            val period = ActivePeriodEntity(
-                id = 1,
-                monthYear = monthYear,
-                salary = salary,
-                cicilanStatus = false,
-                cicilanAmount = alloc["CICILAN"]!!,
-                bensinBudget = alloc["BENSIN"]!!,
-                bensinBalance = alloc["BENSIN"]!!,
-                tabunganBudget = alloc["TABUNGAN"]!!,
-                tabunganBalance = alloc["TABUNGAN"]!!,
-                daruratBudget = alloc["DARURAT"]!!,
-                daruratBalance = alloc["DARURAT"]!!,
-                sisaBudget = alloc["SISA"]!!,
-                sisaBalance = alloc["SISA"]!!,
-                totalAccumulatedTabungan = 0.0,
-                totalAccumulatedSisa = 0.0
-            )
-            dao.insertOrUpdateActivePeriod(period)
-        }
-    }
-
-    fun updateSalary(newSalary: Double) {
-        viewModelScope.launch {
-            val current = dao.getActivePeriodDirect() ?: return@launch
-            if (newSalary < 810000.0) return@launch // Validasi gaji minimal
-
-            val alloc = calculateAllocation(newSalary)
-            val updated = current.copy(
-                salary = newSalary,
-                bensinBudget = alloc["BENSIN"]!!,
-                bensinBalance = alloc["BENSIN"]!!,
-                tabunganBudget = alloc["TABUNGAN"]!!,
-                tabunganBalance = alloc["TABUNGAN"]!!,
-                daruratBudget = alloc["DARURAT"]!!,
-                daruratBalance = alloc["DARURAT"]!!,
-                sisaBudget = alloc["SISA"]!!,
-                sisaBalance = alloc["SISA"]!!
-            )
-            dao.insertOrUpdateActivePeriod(updated)
-        }
-    }
-
-    fun payCicilan() {
-        viewModelScope.launch {
-            val current = dao.getActivePeriodDirect() ?: return@launch
-            if (current.cicilanStatus) return@launch
-
-            val updated = current.copy(cicilanStatus = true)
-            dao.insertOrUpdateActivePeriod(updated)
-            dao.insertTransaction(
-                TransactionEntity(
-                    monthYear = current.monthYear,
-                    category = "CICILAN",
-                    type = "PENGELUARAN",
-                    amount = current.cicilanAmount,
-                    note = "Pembayaran Cicilan Wajib Bulan Ini"
-                )
-            )
-        }
-    }
-
-    fun addTransaction(category: String, type: String, amount: Double, note: String) {
-        viewModelScope.launch {
-            val current = dao.getActivePeriodDirect() ?: return@launch
-            var bB = current.bensinBalance
-            var tB = current.tabunganBalance
-            var dB = current.daruratBalance
-            var sB = current.sisaBalance
-            var accTabungan = current.totalAccumulatedTabungan
-
-            val delta = if (type == "PEMASUKAN") amount else -amount
-
-            when (category) {
-                "BENSIN" -> bB += delta
-                "TABUNGAN" -> {
-                    tB += delta
-                    if (type == "PEMASUKAN") accTabungan += amount
-                }
-                "DARURAT" -> dB += delta
-                "SISA" -> sB += delta
+            if (repository.getSettings() == null) {
+                repository.saveSettings(AppSettingsEntity())
             }
 
-            val updated = current.copy(
-                bensinBalance = bB,
-                tabunganBalance = tB,
-                daruratBalance = dB,
-                sisaBalance = sB,
-                totalAccumulatedTabungan = accTabungan
+            val month = currentMonthKey()
+
+            if (repository.getInstallmentForMonth(month) == null) {
+                repository.saveInstallment(
+                    InstallmentEntity(monthKey = month)
+                )
+            }
+
+            if (repository.getBudgetsForMonth(month).isEmpty()) {
+                repository.saveBudgets(
+                    listOf(
+                        BudgetEntity(
+                            category = "Cicilan wajib",
+                            amount = 810_000L,
+                            monthKey = month
+                        ),
+                        BudgetEntity(
+                            category = "Uang bensin",
+                            amount = 250_000L,
+                            percentage = 10f,
+                            monthKey = month
+                        ),
+                        BudgetEntity(
+                            category = "Tabungan wajib",
+                            amount = 250_000L,
+                            percentage = 10f,
+                            monthKey = month
+                        ),
+                        BudgetEntity(
+                            category = "Dana darurat",
+                            amount = 100_000L,
+                            percentage = 4f,
+                            monthKey = month
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    fun saveSalary(amount: Long) {
+        if (amount < 0) return
+
+        viewModelScope.launch {
+            val current = repository.getSettings() ?: AppSettingsEntity()
+            repository.saveSettings(
+                current.copy(monthlySalary = amount)
             )
-            dao.insertOrUpdateActivePeriod(updated)
-            dao.insertTransaction(
-                TransactionEntity(
-                    monthYear = current.monthYear,
+            _uiState.value = _uiState.value.copy(
+                message = "Gaji berhasil disimpan."
+            )
+        }
+    }
+
+    fun addIncome(
+        category: String,
+        amount: Long,
+        note: String = ""
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                repository.addTransaction(
                     category = category,
-                    type = type,
                     amount = amount,
+                    type = "INCOME",
                     note = note
                 )
-            )
+            }.onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    message = "Pemasukan berhasil dicatat."
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(
+                    message = it.message ?: "Gagal menyimpan pemasukan."
+                )
+            }
         }
     }
 
-    fun transferBalance(source: String, target: String, amount: Double) {
+    fun addExpense(
+        category: String,
+        amount: Long,
+        note: String = ""
+    ) {
         viewModelScope.launch {
-            val current = dao.getActivePeriodDirect() ?: return@launch
-            if (amount <= 0) return@launch
+            runCatching {
+                repository.addTransaction(
+                    category = category,
+                    amount = amount,
+                    type = "EXPENSE",
+                    note = note
+                )
+            }.onSuccess {
+                _uiState.value = _uiState.value.copy(
+                    message = "Pengeluaran berhasil dicatat."
+                )
+            }.onFailure {
+                _uiState.value = _uiState.value.copy(
+                    message = it.message ?: "Gagal menyimpan pengeluaran."
+                )
+            }
+        }
+    }
 
-            val sourceBal = when(source) {
-                "BENSIN" -> current.bensinBalance
-                "TABUNGAN" -> current.tabunganBalance
-                "DARURAT" -> current.daruratBalance
-                "SISA" -> current.sisaBalance
-                else -> 0.0
+    fun markInstallmentPaid() {
+        viewModelScope.launch {
+            val month = currentMonthKey()
+            val current = repository.getInstallmentForMonth(month)
+                ?: InstallmentEntity(monthKey = month)
+
+            if (current.isPaid) {
+                _uiState.value = _uiState.value.copy(
+                    message = "Cicilan bulan ini sudah ditandai lunas."
+                )
+                return@launch
             }
 
-            if (amount > sourceBal) return@launch // Cegah saldo minus
+            repository.saveInstallment(
+                current.copy(isPaid = true)
+            )
 
-            dao.executeTransfer(source, target, amount, current.monthYear, current)
+            repository.addTransaction(
+                category = "Cicilan wajib",
+                amount = current.amount,
+                type = "EXPENSE",
+                note = "Pembayaran cicilan wajib"
+            )
+
+            _uiState.value = _uiState.value.copy(
+                message = "Pembayaran cicilan berhasil dicatat."
+            )
         }
     }
 
-    fun closeMonth(nextMonthYear: String) {
+    fun saveBudget(
+        category: String,
+        amount: Long,
+        percentage: Float = 0f
+    ) {
+        if (amount < 0) return
+
         viewModelScope.launch {
-            val current = dao.getActivePeriodDirect() ?: return@launch
-
-            val totalSavedThisMonth = current.tabunganBalance.coerceAtLeast(0.0)
-            val sisaThisMonth = current.sisaBalance.coerceAtLeast(0.0)
-            val finalBal = current.bensinBalance + current.tabunganBalance + current.daruratBalance + current.sisaBalance
-
-            val report = MonthlyReportEntity(
-                monthYear = current.monthYear,
-                salary = current.salary,
-                totalIncome = current.salary,
-                totalExpense = if (current.cicilanStatus) current.cicilanAmount else 0.0,
-                totalSaved = totalSavedThisMonth,
-                finalBalance = finalBal
+            repository.saveBudget(
+                BudgetEntity(
+                    category = category,
+                    amount = amount,
+                    percentage = percentage,
+                    monthKey = currentMonthKey()
+                )
             )
-            dao.insertReport(report)
+            _uiState.value = _uiState.value.copy(
+                message = "Anggaran berhasil disimpan."
+            )
+        }
+    }
 
-            val newAccTabungan = current.totalAccumulatedTabungan + totalSavedThisMonth
-            val newAccSisa = current.totalAccumulatedSisa + sisaThisMonth
+    fun closeMonth() {
+        viewModelScope.launch {
+            val month = currentMonthKey()
 
-            val alloc = calculateAllocation(current.salary)
-            val newPeriod = ActivePeriodEntity(
-                id = 1,
-                monthYear = nextMonthYear,
-                salary = current.salary,
-                cicilanStatus = false,
-                cicilanAmount = alloc["CICILAN"]!!,
-                bensinBudget = alloc["BENSIN"]!!,
-                bensinBalance = alloc["BENSIN"]!!,
-                tabunganBudget = alloc["TABUNGAN"]!!,
-                tabunganBalance = alloc["TABUNGAN"]!!,
-                daruratBudget = alloc["DARURAT"]!!,
-                daruratBalance = alloc["DARURAT"]!!,
-                sisaBudget = alloc["SISA"]!!,
-                sisaBalance = alloc["SISA"]!!,
-                totalAccumulatedTabungan = newAccTabungan,
-                totalAccumulatedSisa = newAccSisa
+            if (repository.getReport(month) != null) {
+                _uiState.value = _uiState.value.copy(
+                    message = "Laporan bulan ini sudah ditutup."
+                )
+                return@launch
+            }
+
+            val income = repository.observeIncomeTotal(month).first()
+            val expenses = repository.observeExpenseTotal(month).first()
+            val settings = repository.getSettings() ?: AppSettingsEntity()
+            val transactions = repository.getTransactionsForMonth(month)
+
+            val savings = transactions
+                .filter {
+                    it.category == "Tabungan wajib" &&
+                    it.type == "EXPENSE"
+                }
+                .sumOf { it.amount }
+
+            val remaining = settings.monthlySalary + income - expenses
+
+            repository.saveReport(
+                MonthlyReportEntity(
+                    monthKey = month,
+                    totalIncome = income,
+                    totalExpense = expenses,
+                    totalMandatorySavings = savings,
+                    remainingBalance = remaining
+                )
             )
 
-            dao.insertOrUpdateActivePeriod(newPeriod)
+            repository.saveSettings(
+                settings.copy(
+                    accumulatedMandatorySavings =
+                        settings.accumulatedMandatorySavings + savings,
+                    accumulatedRemainingBalance =
+                        settings.accumulatedRemainingBalance + remaining
+                )
+            )
+
+            _uiState.value = _uiState.value.copy(
+                message = "Laporan bulan $month berhasil ditutup."
+            )
         }
     }
 }
-
